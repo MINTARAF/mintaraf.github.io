@@ -1,12 +1,9 @@
 // ============================================================
 //  CONFIGURATION DU SITE
 // ============================================================
-//  1) Mode démo : laissez `firebase` vide → tout est stocké dans
-//     le navigateur (parfait pour tester). Compte démo :
-//        admin@demo.com  /  admin123
-//
-//  2) Mode production : créez un projet Firebase (gratuit) et
-//     collez ici la config "Web app" (voir README.md).
+//  Les valeurs Firebase ci-dessous ne sont PAS secrètes : elles
+//  identifient seulement votre projet. Ce qui protège vos données,
+//  ce sont les règles du fichier `firestore.rules` (voir README).
 // ============================================================
 
 export const CONFIG = {
@@ -19,13 +16,14 @@ export const CONFIG = {
     appId: "1:202671736284:web:7e32a8ad834e78380c3b19"
   },
 
-  // Valeurs par défaut (modifiables ensuite depuis l'admin → Paramètres)
-  defaults: {
-    storeName: "Mintaraf",
-    whatsapp: "212600000000",      // format international, sans + ni espaces
-    currency: "DH",
-    defaultLang: "fr"              // "fr" ou "ar"
-  }
+  // Protection anti-robots (facultatif, recommandé) — voir README §5.
+  // Collez ici la « clé de site » reCAPTCHA v3 utilisée par Firebase App Check.
+  appCheckSiteKey: "",
+
+  // Déconnexion automatique de l'admin après X minutes sans activité
+  adminIdleMinutes: 30,
+
+  defaultLang: "fr" // "fr" ou "ar"
 };
 
 export const isFirebaseConfigured = () =>

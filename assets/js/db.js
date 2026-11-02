@@ -1,175 +1,146 @@
 // ============================================================
 //  Couche de données : une seule API, deux moteurs
-//   - "demo"     : localStorage (aucune configuration)
-//   - "firebase" : Firebase Auth + Firestore (production)
+//   - "firebase" : Firebase Auth + Firestore (le vrai site)
+//   - "demo"     : navigateur uniquement, activé SEULEMENT en local
+//                  (http://localhost:8000/?demo) pour tester.
 // ============================================================
 import { CONFIG, isFirebaseConfigured } from "./config.js";
-import { store, uid } from "./utils.js";
-import { SEED_CATEGORIES, SEED_PRODUCTS, SEED_SETTINGS } from "./seed.js";
+import { store, toMillis } from "./utils.js";
+import { DEFAULT_SETTINGS, DEFAULT_CONTENT, DEFAULT_PACKS } from "./defaults.js";
 
 export const PERMISSIONS = [
-  { key: "products.create", label: "Ajouter des produits" },
-  { key: "products.edit", label: "Modifier les produits" },
-  { key: "products.delete", label: "Supprimer des produits" },
-  { key: "categories.manage", label: "Gérer les catégories" },
-  { key: "orders.view", label: "Voir les commandes" },
-  { key: "orders.manage", label: "Changer le statut des commandes" }
+  { key: "requests.view", label: "Voir les demandes des clients" },
+  { key: "requests.manage", label: "Traiter les demandes (statut, notes)" },
+  { key: "packs.edit", label: "Modifier les packs et les prix" },
+  { key: "content.edit", label: "Modifier les textes du site" }
 ];
 
-export const ORDER_STATUSES = [
+export const STATUSES = [
   { key: "new", label: "Nouvelle" },
-  { key: "confirmed", label: "Confirmée" },
-  { key: "delivered", label: "Livrée" },
+  { key: "progress", label: "En cours" },
+  { key: "done", label: "Résolue" },
   { key: "cancelled", label: "Annulée" }
 ];
 
 export const can = (user, perm) => {
-  if (!user || user.active === false) return false;
+  if (!user || user.active !== true) return false;
   if (user.role === "admin") return true;
   return Array.isArray(user.permissions) && user.permissions.includes(perm);
 };
+export const isAdmin = (user) => Boolean(user && user.active === true && user.role === "admin");
 
-const byNewest = (a, b) => (b.createdAt || 0) - (a.createdAt || 0);
+const byNewest = (a, b) => toMillis(b.createdAt) - toMillis(a.createdAt);
 const byOrder = (a, b) => (a.order ?? 99) - (b.order ?? 99);
 const clean = (o) => JSON.parse(JSON.stringify(o)); // retire les undefined
+const withDefaults = (packs) => (packs.length ? packs : DEFAULT_PACKS.map((p) => ({ ...p, _default: true }))).sort(byOrder);
+
+const LOCAL = ["localhost", "127.0.0.1"].includes(location.hostname);
+const DEMO = LOCAL && (new URLSearchParams(location.search).has("demo") || !isFirebaseConfigured());
 
 // ------------------------------------------------------------
-//  MOTEUR DÉMO (localStorage)
+//  MOTEUR DÉMO (local uniquement — jamais en ligne)
 // ------------------------------------------------------------
 function demoBackend() {
-  const K = { p: "ds_products", c: "ds_categories", s: "ds_settings", o: "ds_orders", u: "ds_users", sess: "ds_session" };
-  if (!store.get(K.p)) store.set(K.p, SEED_PRODUCTS);
-  if (!store.get(K.c)) store.set(K.c, SEED_CATEGORIES);
-  if (!store.get(K.s)) store.set(K.s, { ...SEED_SETTINGS, ...CONFIG.defaults });
-  if (!store.get(K.o)) store.set(K.o, []);
+  const K = { s: "demo_settings", c: "demo_content", p: "demo_packs", r: "demo_requests", u: "demo_users", sess: "demo_session" };
   if (!store.get(K.u)) store.set(K.u, [
-    { uid: "admin-demo", name: "Administrateur", email: "admin@demo.com", password: "admin123", role: "admin", permissions: [], active: true, createdAt: Date.now() },
-    { uid: "staff-demo", name: "Employé démo", email: "staff@demo.com", password: "staff123", role: "staff", permissions: ["products.create", "orders.view"], active: true, createdAt: Date.now() }
+    { uid: "admin-demo", name: "Admin démo", email: "admin@demo.local", password: "demo-admin-2026", role: "admin", permissions: [], active: true, createdAt: Date.now() },
+    { uid: "tech-demo", name: "Technicien démo", email: "tech@demo.local", password: "demo-tech-2026", role: "tech", permissions: ["requests.view", "requests.manage"], active: true, createdAt: Date.now() }
   ]);
-
   const listeners = new Set();
-  const publicUser = (u) => { if (!u) return null; const { password, ...rest } = u; return rest; };
+  const pub = (u) => { if (!u) return null; const { password, ...rest } = u; return rest; };
   const current = () => {
-    const id = store.get(K.sess);
-    const u = (store.get(K.u) || []).find((x) => x.uid === id);
-    return u && u.active !== false ? publicUser(u) : null;
+    const u = store.get(K.u, []).find((x) => x.uid === store.get(K.sess));
+    return u && u.active ? pub(u) : null;
   };
   const emit = () => listeners.forEach((cb) => cb(current()));
-  const upsert = (key, item, idField = "id") => {
+  const need = (ok) => { if (!ok) throw new Error("Permission refusée."); };
+  const upsert = (key, item, idf = "id") => {
     const list = store.get(key, []);
-    const i = list.findIndex((x) => x[idField] === item[idField]);
+    const i = list.findIndex((x) => x[idf] === item[idf]);
     if (i >= 0) list[i] = { ...list[i], ...item }; else list.push(item);
     store.set(key, list);
-    return item[idField];
   };
-  const removeFrom = (key, id, idField = "id") => store.set(key, store.get(key, []).filter((x) => x[idField] !== id));
-  const requirePerm = (perm) => { if (!can(current(), perm)) throw new Error("Permission refusée"); };
+  const rm = (key, id, idf = "id") => store.set(key, store.get(key, []).filter((x) => x[idf] !== id));
 
   return {
     mode: "demo",
-    async listProducts({ all = false } = {}) {
+    async getSettings() { return { ...DEFAULT_SETTINGS, ...store.get(K.s, {}) }; },
+    async getContent() { return { ...DEFAULT_CONTENT, ...store.get(K.c, {}) }; },
+    async listPacks({ all = false } = {}) {
       const list = store.get(K.p, []);
-      return (all ? list : list.filter((p) => p.published)).sort(byNewest);
+      return all ? list.sort(byOrder) : withDefaults(list.filter((p) => p.active));
     },
-    async getProduct(id) { return store.get(K.p, []).find((p) => p.id === id) || null; },
-    async saveProduct(p) {
-      const existing = p.id ? store.get(K.p, []).find((x) => x.id === p.id) : null;
-      const isNew = !existing;
-      const me = current();
-      const ownDraft = existing && existing.createdBy === me?.uid && can(me, "products.create");
-      if (!ownDraft) requirePerm(isNew ? "products.create" : "products.edit");
-      const item = { ...p, id: p.id || uid("p-"), updatedAt: Date.now() };
-      if (isNew) item.createdAt = item.createdAt || Date.now();
-      return upsert(K.p, clean(item));
+    async createRequest(r) {
+      const list = store.get(K.r, []);
+      if (list.some((x) => x.id === r.id)) throw new Error("Demande déjà existante.");
+      list.push({ ...clean(r), createdAt: Date.now() }); store.set(K.r, list);
     },
-    async deleteProduct(id) { requirePerm("products.delete"); removeFrom(K.p, id); },
+    async listRequests() { need(can(current(), "requests.view")); return store.get(K.r, []).sort(byNewest); },
+    async updateRequest(id, patch) { need(can(current(), "requests.manage")); upsert(K.r, { id, ...clean(patch), updatedAt: Date.now() }); },
+    async deleteRequest(id) { need(isAdmin(current())); rm(K.r, id); },
+    async savePack(p) { need(can(current(), "packs.edit")); upsert(K.p, clean(p)); },
+    async deletePack(id) { need(isAdmin(current())); rm(K.p, id); },
+    async seedPacks() { need(can(current(), "packs.edit")); if (!store.get(K.p, []).length) store.set(K.p, DEFAULT_PACKS); },
+    async saveSettings(s) { need(isAdmin(current())); store.set(K.s, { ...store.get(K.s, {}), ...clean(s) }); },
+    async saveContent(c) { need(can(current(), "content.edit")); store.set(K.c, { ...store.get(K.c, {}), ...clean(c) }); },
 
-    async listCategories() { return store.get(K.c, []).sort(byOrder); },
-    async saveCategory(c) { requirePerm("categories.manage"); return upsert(K.c, clean({ ...c, id: c.id || uid("c-") })); },
-    async deleteCategory(id) { requirePerm("categories.manage"); removeFrom(K.c, id); },
-
-    async getSettings() { return { ...CONFIG.defaults, ...store.get(K.s, {}) }; },
-    async saveSettings(s) {
-      if (current()?.role !== "admin") throw new Error("Permission refusée");
-      store.set(K.s, { ...store.get(K.s, {}), ...clean(s) });
-    },
-
-    async createOrder(o) { const list = store.get(K.o, []); list.push(clean(o)); store.set(K.o, list); return o.id; },
-    async listOrders() { requirePerm("orders.view"); return store.get(K.o, []).sort(byNewest); },
-    async updateOrder(id, patch) { requirePerm("orders.manage"); upsert(K.o, { id, ...patch }); },
-    async deleteOrder(id) { if (current()?.role !== "admin") throw new Error("Permission refusée"); removeFrom(K.o, id); },
-
-    // --- Authentification ---
-    onAuth(cb) { listeners.add(cb); cb(current()); return () => listeners.delete(cb); },
+    onAuth(cb) { listeners.add(cb); setTimeout(() => cb(current())); return () => listeners.delete(cb); },
     async signIn(email, password) {
-      const u = store.get(K.u, []).find((x) => x.email.toLowerCase() === email.trim().toLowerCase());
+      const u = store.get(K.u, []).find((x) => x.email === email.trim().toLowerCase());
       if (!u || u.password !== password) throw new Error("Email ou mot de passe incorrect.");
-      if (u.active === false) throw new Error("Ce compte est désactivé. Contactez l'administrateur.");
+      if (!u.active) throw new Error("Ce compte est désactivé.");
       store.set(K.sess, u.uid); emit();
     },
     async signOut() { store.remove(K.sess); emit(); },
-    async resetPassword() { throw new Error("En mode démo, l'administrateur modifie les mots de passe depuis Utilisateurs."); },
+    async resetPassword() { throw new Error("Indisponible en mode démo."); },
+    async changePassword() { throw new Error("Indisponible en mode démo."); },
     async needsSetup() { return false; },
     async setupAdmin() {},
-
-    // --- Utilisateurs (admin uniquement) ---
-    async listUsers() {
-      if (current()?.role !== "admin") throw new Error("Permission refusée");
-      return store.get(K.u, []).map(publicUser).sort(byNewest);
-    },
-    async createUser({ name, email, password, role, permissions, active }) {
-      if (current()?.role !== "admin") throw new Error("Permission refusée");
+    async listUsers() { need(isAdmin(current())); return store.get(K.u, []).map(pub).sort(byNewest); },
+    async createUser(u) {
+      need(isAdmin(current()));
       const list = store.get(K.u, []);
-      if (list.some((x) => x.email.toLowerCase() === email.toLowerCase())) throw new Error("Cet email est déjà utilisé.");
-      if (!password || password.length < 6) throw new Error("Le mot de passe doit contenir au moins 6 caractères.");
-      list.push({ uid: uid("u-"), name, email, password, role, permissions, active, createdAt: Date.now() });
+      if (list.some((x) => x.email === u.email.toLowerCase())) throw new Error("Cet email est déjà utilisé.");
+      list.push({ ...u, email: u.email.toLowerCase(), uid: "u-" + Date.now(), createdAt: Date.now() });
       store.set(K.u, list);
     },
-    async updateUser(id, patch) {
-      if (current()?.role !== "admin") throw new Error("Permission refusée");
-      if (patch.password !== undefined && patch.password !== "" && patch.password.length < 6) throw new Error("Le mot de passe doit contenir au moins 6 caractères.");
-      if (patch.password === "") delete patch.password;
-      upsert(K.u, { uid: id, ...patch }, "uid");
-      emit();
-    },
-    async deleteUser(id) {
-      if (current()?.role !== "admin") throw new Error("Permission refusée");
-      if (id === current()?.uid) throw new Error("Vous ne pouvez pas supprimer votre propre compte.");
-      removeFrom(K.u, id, "uid");
-    },
-    async resetDemo() {
-      Object.values(K).forEach((k) => store.remove(k));
-      location.reload();
-    }
+    async updateUser(id, patch) { need(isAdmin(current())); upsert(K.u, { uid: id, ...clean(patch) }, "uid"); emit(); },
+    async deleteUser(id) { need(isAdmin(current())); if (id === current()?.uid) throw new Error("Vous ne pouvez pas supprimer votre propre compte."); rm(K.u, id, "uid"); }
   };
 }
 
 // ------------------------------------------------------------
-//  MOTEUR FIREBASE
+//  MOTEUR FIREBASE (Firebase est hébergé dans assets/vendor :
+//  aucun script externe n'est chargé)
 // ------------------------------------------------------------
-const FB = "https://www.gstatic.com/firebasejs/10.12.2/";
-
 async function firebaseBackend() {
-  const [{ initializeApp, deleteApp }, authMod, fs] = await Promise.all([
-    import(FB + "firebase-app.js"),
-    import(FB + "firebase-auth.js"),
-    import(FB + "firebase-firestore.js")
-  ]);
-  const { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile } = authMod;
-  const { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, writeBatch } = fs;
+  const F = await import("../vendor/fb-data.js");
+  const app = F.initializeApp(CONFIG.firebase);
 
-  const app = initializeApp(CONFIG.firebase);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-  let profile = null;
+  if (CONFIG.appCheckSiteKey) {
+    try {
+      const AC = await import("../vendor/fb-appcheck.js");
+      AC.initializeAppCheck(app, { provider: new AC.ReCaptchaV3Provider(CONFIG.appCheckSiteKey), isTokenAutoRefreshEnabled: true });
+    } catch (e) { console.warn("App Check non initialisé", e); }
+  }
 
+  const db = F.getFirestore(app);
+  const { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, writeBatch, serverTimestamp } = F;
   const all = async (q) => (await getDocs(q)).docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  let A = null, auth = null, profile = null;
+  const loadAuth = async () => {
+    if (auth) return;
+    A = await import("../vendor/fb-auth.js");
+    auth = A.initializeAuth(app, { persistence: A.browserSessionPersistence });
+  };
   const loadProfile = async (user) => {
     if (!user) return null;
     const snap = await getDoc(doc(db, "users", user.uid));
     if (!snap.exists()) return { uid: user.uid, email: user.email, role: "none", permissions: [], active: false, noProfile: true };
-    return { uid: user.uid, email: user.email, ...snap.data() };
+    return { uid: user.uid, ...snap.data(), email: user.email };
   };
+
   const friendly = (e) => {
     const code = e?.code || "";
     const map = {
@@ -178,10 +149,13 @@ async function firebaseBackend() {
       "auth/user-not-found": "Email ou mot de passe incorrect.",
       "auth/invalid-email": "Adresse email invalide.",
       "auth/email-already-in-use": "Cet email est déjà utilisé.",
-      "auth/weak-password": "Le mot de passe doit contenir au moins 6 caractères.",
+      "auth/weak-password": "Mot de passe trop faible.",
+      "auth/password-does-not-meet-requirements": "Le mot de passe ne respecte pas les règles de sécurité (longueur, majuscule, chiffre…).",
       "auth/too-many-requests": "Trop de tentatives. Réessayez dans quelques minutes.",
+      "auth/requires-recent-login": "Par sécurité, reconnectez-vous puis réessayez.",
+      "auth/network-request-failed": "Connexion internet impossible.",
       "permission-denied": "Permission refusée.",
-      "auth/network-request-failed": "Connexion internet impossible."
+      "unavailable": "Service momentanément indisponible. Vérifiez votre connexion."
     };
     return new Error(map[code] || e?.message || "Erreur inconnue.");
   };
@@ -189,87 +163,94 @@ async function firebaseBackend() {
 
   return {
     mode: "firebase",
-    listProducts: wrap(async ({ all: everything = false } = {}) => {
-      const q = everything ? collection(db, "products") : query(collection(db, "products"), where("published", "==", true));
-      return (await all(q)).sort(byNewest);
-    }),
-    getProduct: wrap(async (id) => {
-      try { const s = await getDoc(doc(db, "products", id)); return s.exists() ? { id: s.id, ...s.data() } : null; }
-      catch (e) { if (e.code === "permission-denied") return null; throw e; }
-    }),
-    saveProduct: wrap(async (p) => {
-      const id = p.id || uid("p-");
-      const ref = doc(db, "products", id);
-      const exists = p.id ? (await getDoc(ref)).exists() : false;
-      const data = clean({ ...p, id, updatedAt: Date.now(), ...(exists ? {} : { createdAt: p.createdAt || Date.now() }) });
-      await setDoc(ref, data, { merge: true });
-      return id;
-    }),
-    deleteProduct: wrap(async (id) => deleteDoc(doc(db, "products", id))),
-
-    listCategories: wrap(async () => (await all(collection(db, "categories"))).sort(byOrder)),
-    saveCategory: wrap(async (c) => { const id = c.id || uid("c-"); await setDoc(doc(db, "categories", id), clean({ ...c, id }), { merge: true }); return id; }),
-    deleteCategory: wrap(async (id) => deleteDoc(doc(db, "categories", id))),
-
     getSettings: wrap(async () => {
-      const s = await getDoc(doc(db, "settings", "store"));
-      return { ...SEED_SETTINGS, ...CONFIG.defaults, ...(s.exists() ? s.data() : {}) };
+      const s = await getDoc(doc(db, "settings", "site"));
+      return { ...DEFAULT_SETTINGS, ...(s.exists() ? s.data() : {}) };
     }),
-    saveSettings: wrap(async (s) => setDoc(doc(db, "settings", "store"), clean(s), { merge: true })),
+    getContent: wrap(async () => {
+      const s = await getDoc(doc(db, "settings", "content"));
+      return { ...DEFAULT_CONTENT, ...(s.exists() ? s.data() : {}) };
+    }),
+    listPacks: wrap(async ({ all: everything = false } = {}) => {
+      if (everything) return (await all(collection(db, "packs"))).sort(byOrder);
+      return withDefaults(await all(query(collection(db, "packs"), where("active", "==", true))));
+    }),
+    createRequest: wrap(async (r) => setDoc(doc(db, "requests", r.id), { ...clean(r), createdAt: serverTimestamp() })),
+    listRequests: wrap(async () => (await all(collection(db, "requests"))).sort(byNewest)),
+    updateRequest: wrap(async (id, patch) => updateDoc(doc(db, "requests", id), { ...clean(patch), updatedAt: serverTimestamp(), updatedBy: profile?.uid || "" })),
+    deleteRequest: wrap(async (id) => deleteDoc(doc(db, "requests", id))),
+    savePack: wrap(async (p) => setDoc(doc(db, "packs", p.id), clean(p))),
+    deletePack: wrap(async (id) => deleteDoc(doc(db, "packs", id))),
+    seedPacks: wrap(async () => {
+      const existing = await getDocs(collection(db, "packs"));
+      if (!existing.empty) return;
+      const b = writeBatch(db);
+      DEFAULT_PACKS.forEach((p) => b.set(doc(db, "packs", p.id), p));
+      await b.commit();
+    }),
+    saveSettings: wrap(async (s) => setDoc(doc(db, "settings", "site"), clean(s), { merge: true })),
+    saveContent: wrap(async (c) => setDoc(doc(db, "settings", "content"), clean(c), { merge: true })),
 
-    createOrder: wrap(async (o) => { await setDoc(doc(db, "orders", o.id), clean(o)); return o.id; }),
-    listOrders: wrap(async () => (await all(collection(db, "orders"))).sort(byNewest)),
-    updateOrder: wrap(async (id, patch) => updateDoc(doc(db, "orders", id), clean(patch))),
-    deleteOrder: wrap(async (id) => deleteDoc(doc(db, "orders", id))),
-
+    // --- Authentification (chargée seulement dans l'admin) ---
     onAuth(cb) {
-      return onAuthStateChanged(auth, async (user) => {
-        try { profile = await loadProfile(user); } catch { profile = user ? { uid: user.uid, email: user.email, noProfile: true, active: false } : null; }
-        cb(profile);
-      });
+      let unsub = () => {};
+      loadAuth().then(() => {
+        unsub = A.onAuthStateChanged(auth, async (user) => {
+          try { profile = await loadProfile(user); }
+          catch { profile = user ? { uid: user.uid, email: user.email, noProfile: true, active: false } : null; }
+          cb(profile);
+        });
+      }).catch(() => cb(null));
+      return () => unsub();
     },
-    signIn: wrap(async (email, password) => { await signInWithEmailAndPassword(auth, email.trim(), password); }),
-    signOut: wrap(async () => signOut(auth)),
-    resetPassword: wrap(async (email) => sendPasswordResetEmail(auth, email.trim())),
+    signIn: wrap(async (email, password) => { await loadAuth(); await A.signInWithEmailAndPassword(auth, email.trim(), password); }),
+    signOut: wrap(async () => { await loadAuth(); await A.signOut(auth); }),
+    resetPassword: wrap(async (email) => { await loadAuth(); await A.sendPasswordResetEmail(auth, email.trim()); }),
+    changePassword: wrap(async (current, next) => {
+      await loadAuth();
+      const u = auth.currentUser;
+      if (!u) throw new Error("Non connecté.");
+      await A.reauthenticateWithCredential(u, A.EmailAuthProvider.credential(u.email, current));
+      await A.updatePassword(u, next);
+    }),
 
     // Premier lancement : créer le compte administrateur principal
     needsSetup: wrap(async () => !(await getDoc(doc(db, "meta", "setup"))).exists()),
     setupAdmin: wrap(async ({ name, email, password }) => {
+      await loadAuth();
       let cred;
-      try { cred = await createUserWithEmailAndPassword(auth, email.trim(), password); }
+      try { cred = await A.createUserWithEmailAndPassword(auth, email.trim(), password); }
       catch (e) {
-        if (e.code === "auth/email-already-in-use") cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+        if (e.code === "auth/email-already-in-use") cred = await A.signInWithEmailAndPassword(auth, email.trim(), password);
         else throw e;
       }
       const u = cred.user;
-      await updateProfile(u, { displayName: name }).catch(() => {});
-      const batch = writeBatch(db);
-      batch.set(doc(db, "users", u.uid), { name, email: u.email, role: "admin", permissions: [], active: true, createdAt: Date.now() });
-      batch.set(doc(db, "meta", "setup"), { done: true, by: u.uid, at: Date.now() });
-      await batch.commit();
+      await A.updateProfile(u, { displayName: name }).catch(() => {});
+      const b = writeBatch(db);
+      b.set(doc(db, "users", u.uid), { name, email: u.email, role: "admin", permissions: [], active: true, createdAt: Date.now() });
+      b.set(doc(db, "meta", "setup"), { done: true, by: u.uid, at: Date.now() });
+      await b.commit();
       profile = await loadProfile(u);
     }),
 
+    // --- Utilisateurs (administrateur uniquement, garanti par les règles) ---
     listUsers: wrap(async () => (await all(collection(db, "users"))).map((u) => ({ uid: u.id, ...u })).sort(byNewest)),
     createUser: wrap(async ({ name, email, password, role, permissions, active }) => {
-      // Une 2e instance Firebase évite de déconnecter l'administrateur
-      const sec = initializeApp(CONFIG.firebase, "secondary-" + Date.now());
+      // Une 2e instance évite de déconnecter l'administrateur
+      await loadAuth();
+      const sec = F.initializeApp(CONFIG.firebase, "secondary-" + Date.now());
       try {
-        const secAuth = getAuth(sec);
-        const cred = await createUserWithEmailAndPassword(secAuth, email.trim(), password);
+        const secAuth = A.initializeAuth(sec, { persistence: A.inMemoryPersistence });
+        const cred = await A.createUserWithEmailAndPassword(secAuth, email.trim(), password);
         await setDoc(doc(db, "users", cred.user.uid), clean({ name, email: cred.user.email, role, permissions, active, createdAt: Date.now() }));
-        await signOut(secAuth);
-      } finally { await deleteApp(sec).catch(() => {}); }
+        await A.signOut(secAuth);
+      } finally { await F.deleteApp(sec).catch(() => {}); }
     }),
-    updateUser: wrap(async (id, patch) => {
-      const { password, ...rest } = patch;
-      await updateDoc(doc(db, "users", id), clean(rest));
-    }),
+    updateUser: wrap(async (id, patch) => updateDoc(doc(db, "users", id), clean(patch))),
     deleteUser: wrap(async (id) => {
       if (id === profile?.uid) throw new Error("Vous ne pouvez pas supprimer votre propre compte.");
       await deleteDoc(doc(db, "users", id));
-    }),
-    async resetDemo() {}
+    })
   };
 }
 
@@ -277,6 +258,6 @@ async function firebaseBackend() {
 let _db = null;
 export async function getDB() {
   if (_db) return _db;
-  _db = isFirebaseConfigured() ? await firebaseBackend() : demoBackend();
+  _db = DEMO ? demoBackend() : await firebaseBackend();
   return _db;
 }

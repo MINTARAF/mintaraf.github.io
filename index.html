@@ -3,46 +3,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Najma Digital — Produits digitaux</title>
-  <meta name="description" content="Formations, templates et e-books. Commandez en quelques clics et recevez vos fichiers sur WhatsApp.">
-  <meta name="theme-color" content="#0F1430">
-  <meta property="og:title" content="Najma Digital">
-  <meta property="og:description" content="Produits digitaux livrés sur WhatsApp.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://content-firebaseappcheck.googleapis.com; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Mintaraf — Support informatique à distance</title>
+  <meta name="description" content="Support informatique pour commerces et petites entreprises au Maroc. Un technicien se connecte à distance (AnyDesk ou appel vidéo) et règle votre problème. À partir de 199 DH.">
+  <meta name="theme-color" content="#FFFFFF">
+  <meta property="og:title" content="Mintaraf — Support informatique à distance">
+  <meta property="og:description" content="Un technicien règle votre problème informatique à distance, à partir de 199 DH.">
+  <meta property="og:type" content="website">
   <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="preload" href="assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="assets/css/site.css">
 </head>
 <body>
-  <div id="demoRibbon" class="demo-ribbon" hidden></div>
   <div id="announce" class="announce" hidden></div>
 
   <header class="site-header">
     <div class="wrap header-row">
-      <a href="#/" class="logo" id="logo" aria-label="Accueil"></a>
-      <nav class="main-nav" aria-label="Navigation">
-        <a href="#/" data-i18n="nav_home" data-route="home"></a>
-        <a href="#/shop" data-i18n="nav_shop" data-route="shop"></a>
-        <a href="#/faq" data-i18n="nav_faq" data-route="faq"></a>
-      </nav>
+      <a href="#/" class="logo" id="logo"></a>
+      <nav class="main-nav" id="mainNav" data-i18n-aria="menu"></nav>
       <div class="header-actions">
-        <button class="icon-btn" id="searchToggle" aria-label="Rechercher"></button>
-        <button class="lang-btn" id="langBtn" data-i18n="lang_switch"></button>
-        <button class="icon-btn" id="cartBtn" aria-label="Panier">
-          <span class="cart-count" id="cartCount" hidden>0</span>
-        </button>
+        <button class="lang-btn" id="langBtn" type="button"></button>
+        <a class="btn btn-primary header-cta" href="#/tarifs" data-i18n="cta_request"></a>
+        <button class="icon-btn menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="mobileNav" data-i18n-aria="menu"></button>
       </div>
     </div>
-    <div class="search-bar" id="searchBar" hidden>
-      <div class="wrap">
-        <label class="sr-only" for="searchInput">Recherche</label>
-        <input class="input" id="searchInput" type="search" data-i18n-ph="search_ph" autocomplete="off">
-      </div>
-    </div>
+    <nav class="mobile-nav" id="mobileNav" hidden></nav>
   </header>
 
-  <main id="app" tabindex="-1"></main>
+  <main id="app" tabindex="-1"><div class="loading"><div class="spinner"></div></div></main>
 
   <footer class="site-footer">
     <div class="wrap">
@@ -51,19 +40,9 @@
     </div>
   </footer>
 
-  <div class="overlay" id="overlay" hidden></div>
-  <aside class="drawer" id="drawer" aria-hidden="true" aria-labelledby="drawerTitle" role="dialog">
-    <div class="drawer-head">
-      <h2 id="drawerTitle" data-i18n="cart"></h2>
-      <button class="icon-btn" id="drawerClose" aria-label="Fermer"></button>
-    </div>
-    <div class="drawer-body" id="drawerBody"></div>
-    <div class="drawer-foot" id="drawerFoot"></div>
-  </aside>
-
-  <a class="wa-float" id="waFloat" target="_blank" rel="noopener" aria-label="WhatsApp"></a>
+  <a class="wa-float" id="waFloat" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" hidden></a>
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script type="module" src="assets/js/store.js"></script>
+  <script type="module" src="assets/js/site.js"></script>
 </body>
 </html>

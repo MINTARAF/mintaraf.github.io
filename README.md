@@ -1,144 +1,145 @@
-# Najma Digital — Boutique de produits digitaux
+# Mintaraf — Support informatique à distance
 
-Site e-commerce professionnel (français + arabe) pour vendre des produits digitaux.
-Le client ajoute ses produits au panier, remplit ses infos, et la commande s'ouvre
-directement dans **WhatsApp** avec un message automatique contenant tous les détails.
+Site pour commerces et petites entreprises **sans service informatique** :
+le client choisit un pack, décrit son problème, et un technicien l'aide à distance
+(AnyDesk ou appel vidéo) ou se déplace.
 
-```
-index.html          → la boutique (clients)
-admin.html          → l'espace administration
-assets/js/config.js → ⚙️ la seule configuration à modifier
-assets/js/i18n.js   → tous les textes FR / AR de la boutique
-firestore.rules     → règles de sécurité (permissions admin / utilisateur)
-```
-
----
-
-## 1. Tester tout de suite (mode démo)
-
-Sans rien configurer, le site marche en **mode démo** : les données sont gardées dans
-le navigateur. Parfait pour voir le rendu.
-
-- Boutique : `index.html`
-- Admin : `admin.html`
-  - Administrateur : `admin@demo.com` / `admin123`
-  - Utilisateur : `staff@demo.com` / `staff123`
-
-> Les modules JavaScript ne marchent pas en double-cliquant sur le fichier.
-> Lancez un petit serveur dans le dossier : `python -m http.server 8000`
-> puis ouvrez http://localhost:8000 — ou mettez-le directement sur GitHub (étape 3).
-
-⚠️ En mode démo, chaque navigateur a ses propres données. Pour un vrai site, faites l'étape 2.
-
----
-
-## 2. Passer en production avec Firebase (gratuit)
-
-GitHub Pages héberge seulement des fichiers. Pour les **comptes** (admin / utilisateur)
-et pour que les **produits soient les mêmes pour tous les clients**, on utilise Firebase
-(offre gratuite « Spark », largement suffisante pour démarrer).
-
-1. Allez sur https://console.firebase.google.com → **Ajouter un projet** (Google Analytics : pas nécessaire).
-2. Dans le projet : icône **`</>`** (Web) → donnez un nom → **Enregistrer l'application**.
-   Firebase affiche un bloc `firebaseConfig = { apiKey: ..., ... }`.
-3. Copiez ces valeurs dans **`assets/js/config.js`** (bloc `firebase`).
-4. Menu **Authentication** → *Commencer* → onglet *Sign-in method* → activez **Adresse e-mail/Mot de passe**.
-5. Menu **Firestore Database** → *Créer une base de données* → mode **production** →
-   région `eur3 (europe-west)` (la plus proche du Maroc).
-6. Firestore → onglet **Règles** → effacez tout, collez le contenu de **`firestore.rules`** → **Publier**.
-7. Authentication → **Paramètres** → *Domaines autorisés* → ajoutez `VOTRE-PSEUDO.github.io`.
-
-> La clé `apiKey` visible dans le code est **normale** avec Firebase : ce sont les
-> règles (`firestore.rules`) qui protègent vos données. Même si quelqu'un modifie le code
-> du site, il ne peut rien faire sans les permissions données par l'administrateur.
-
----
-
-## 3. Mettre le site en ligne sur GitHub Pages
-
-1. Créez un compte sur https://github.com puis **New repository** (ex : `boutique`), en *Public*.
-2. **Add file → Upload files** : glissez **tout le contenu** du dossier
-   (`index.html`, `admin.html`, `assets/`, `.nojekyll`, etc.) → **Commit changes**.
-3. **Settings → Pages** → *Source* : **Deploy from a branch** → branche `main`, dossier `/ (root)` → **Save**.
-4. Après 1–2 minutes, le site est en ligne : `https://VOTRE-PSEUDO.github.io/boutique/`
-   - Admin : `https://VOTRE-PSEUDO.github.io/boutique/admin.html`
-
-Pour modifier un fichier plus tard : ouvrez-le sur GitHub → icône crayon → *Commit*.
-
-Nom de domaine perso (ex : `najma.ma`) : *Settings → Pages → Custom domain*.
-
----
-
-## 4. Premier lancement
-
-1. Ouvrez `admin.html` → l'écran **Bienvenue** apparaît → créez le **compte administrateur principal**.
-   (Cet écran n'apparaît qu'une seule fois.)
-2. **Paramètres** → mettez votre **numéro WhatsApp** au format international sans `+`
-   (ex : `0612345678` → `212612345678`) → *Tester le numéro* → *Enregistrer*.
-3. **Produits** → *Ajouter* (ou *Paramètres → Charger les produits d'exemple* pour voir le rendu).
-
----
-
-## 5. Comptes et permissions
-
-| | Administrateur | Utilisateur |
+| Pack | Prix | Délai |
 |---|---|---|
-| Tableau de bord | ✅ | ✅ |
-| Ajouter des produits | ✅ | si coché |
-| Modifier les produits | ✅ | si coché (sinon seulement ceux qu'il a créés) |
-| Supprimer des produits | ✅ | si coché |
-| Gérer les catégories | ✅ | si coché |
-| Voir les commandes | ✅ | si coché |
-| Changer le statut des commandes | ✅ | si coché |
-| Gérer les utilisateurs | ✅ | ❌ |
-| Paramètres de la boutique | ✅ | ❌ |
-| Supprimer des commandes | ✅ | ❌ |
+| Standard | 199 DH | Rappel sous 24 h (à distance) |
+| Urgent | 299 DH | Prise en charge en moins de 30 min (à distance) |
+| Sur site | 499 DH | Un technicien se déplace |
 
-Création d'un compte : **Utilisateurs → Ajouter** → nom, email, mot de passe, type de compte,
-cochez les accès. Vous pouvez **désactiver** un compte à tout moment sans le supprimer.
-
-Mot de passe oublié : bouton sur l'écran de connexion (email automatique de Firebase).
-
----
-
-## 6. Le message WhatsApp
-
-Quand le client clique sur *Envoyer la commande sur WhatsApp*, WhatsApp s'ouvre avec :
+Tout (prix, textes FR/AR, FAQ, services, coordonnées) se modifie depuis l'admin.
 
 ```
-🛒 *Nouvelle commande* — CMD-7KQ2XA
-🏪 Najma Digital
-━━━━━━━━━━━━
-👤 Nom : Youssef Alami
-📱 Téléphone : 0612345678
-📧 Email : y@exemple.ma
-━━━━━━━━━━━━
-📦 *Produits :*
-1. Formation e-commerce au Maroc × 1 = 299 DH
-2. Pack 300 templates Instagram × 1 = 149 DH
-━━━━━━━━━━━━
-💰 *Total : 448 DH*
-
-Merci de confirmer ma commande.
+index.html             → le site public (français + arabe)
+admin.html             → l'espace administration
+firestore.rules        → 🔒 règles de sécurité (à publier dans Firebase)
+assets/js/config.js    → configuration Firebase
+assets/js/defaults.js  → textes par défaut (avant la première modification dans l'admin)
+assets/vendor/         → Firebase, hébergé localement (aucun script externe)
+assets/fonts/          → polices hébergées localement
 ```
 
-La commande est aussi enregistrée dans **Admin → Commandes** (statuts : Nouvelle,
-Confirmée, Livrée, Annulée), avec un bouton pour écrire au client sur WhatsApp.
-Le message est en arabe si le client navigue en arabe.
+---
+
+## 1. Mettre à jour le site sur GitHub
+
+1. Sur GitHub, ouvrez le dépôt `mintaraf.github.io`.
+2. **Supprimez les anciens fichiers** qui ne servent plus :
+   `assets/css/style.css`, `assets/js/store.js`, `assets/js/seed.js`.
+3. **Add file → Upload files** : glissez tout le contenu de ce dossier
+   (y compris `.nojekyll`, `404.html`, `robots.txt`, `assets/`) → **Commit changes**.
+4. **Settings → Pages** : vérifiez que **Enforce HTTPS** est coché.
+
+> ⚠️ Faites l'étape 2 ci-dessous (publier les règles) **juste avant ou juste après**
+> l'envoi des fichiers : les nouvelles règles sont nécessaires pour que les demandes
+> soient enregistrées. En attendant, le site marche quand même (les demandes arrivent
+> sur WhatsApp).
 
 ---
 
-## 7. Personnaliser
+## 2. Publier les règles de sécurité (obligatoire)
 
-- **Nom, numéro, textes d'accueil, bandeau, réseaux sociaux** : Admin → Paramètres.
-- **FAQ, textes des boutons, message WhatsApp** : `assets/js/i18n.js` (FR et AR).
-- **Couleurs** : en haut de `assets/css/style.css` (`--brass` = couleur dorée, `--ink` = fond).
-- **Images produits** : depuis l'admin (*Choisir une image*, compressée automatiquement)
-  ou en collant un lien. Sans image, une couverture élégante est générée.
+Firebase Console → projet **mintaraf** → **Firestore Database → Règles** →
+effacez tout, collez le contenu de **`firestore.rules`** → **Publier**.
+
+Ces règles garantissent que :
+- un visiteur peut **envoyer** une demande, mais ne peut **lire aucune** demande ;
+- le prix d'une demande doit être **exactement** celui du pack (impossible de tricher) ;
+- chaque champ est vérifié (type, longueur) — impossible d'envoyer n'importe quoi ;
+- seuls les comptes **actifs** de l'équipe voient les demandes, selon leurs droits ;
+- seul un **administrateur** gère les utilisateurs, les coordonnées et les suppressions ;
+- les anciennes collections de l'ancienne boutique sont fermées.
+
+Pour tester une règle : onglet **Règles → Terrain de jeu (Rules Playground)**.
 
 ---
 
-## Limites de l'offre gratuite Firebase
+## 3. Premier lancement de l'admin
 
-50 000 lectures et 20 000 écritures par jour — soit plusieurs milliers de visiteurs par jour.
-Au-delà, Firebase vous prévient ; rien n'est facturé sans votre accord.
+Ouvrez `https://mintaraf.github.io/admin.html` et connectez-vous avec votre compte
+administrateur existant. À la première connexion, les 3 packs (199 / 299 / 499 DH)
+sont créés automatiquement.
+
+S'il n'existe encore aucun compte, l'écran **Bienvenue** s'affiche une seule fois pour
+créer l'administrateur principal. **Faites-le immédiatement** après la mise en ligne.
+
+Ensuite, dans l'admin :
+1. **Coordonnées** → mettez votre **numéro WhatsApp** (ex : `212612345678`) → *Tester* → *Enregistrer*.
+2. **Packs et prix** → vérifiez les prix et les textes.
+3. **Contenu du site** → adaptez les textes, services et questions.
+
+### Rôles
+
+| | Administrateur | Technicien |
+|---|---|---|
+| Voir les demandes | ✅ | si coché |
+| Traiter les demandes (statut, notes) | ✅ | si coché |
+| Modifier packs et prix | ✅ | si coché |
+| Modifier les textes du site | ✅ | si coché |
+| Coordonnées, utilisateurs, suppressions | ✅ | ❌ |
+
+---
+
+## 4. Réglages de sécurité Firebase (15 minutes, fortement recommandé)
+
+Dans **Firebase Console → Authentication → Settings** :
+- **Password policy** → *Require enforcement* ; longueur minimale **12** ;
+  cochez majuscule, minuscule et chiffre.
+- **User account management → Email enumeration protection** → activé.
+- **Authorized domains** → gardez seulement `mintaraf.github.io`, `mintaraf.firebaseapp.com`
+  (et `localhost` si vous testez sur votre PC).
+
+Dans **Google Cloud Console → APIs & Services → Credentials** → la clé « Browser key » :
+- **Application restrictions → Websites** → ajoutez `https://mintaraf.github.io/*`.
+
+Comptes :
+- Activez la **validation en deux étapes (2FA)** sur votre compte **GitHub** et sur votre
+  compte **Google** (Firebase). Quiconque contrôle ces comptes contrôle le site :
+  c'est la protection la plus importante de toutes.
+
+---
+
+## 5. Protection anti-robots (facultatif, recommandé si vous recevez du spam)
+
+1. Firebase Console → **App Check** → enregistrez l'application web avec **reCAPTCHA v3**
+   → copiez la **clé de site**.
+2. Collez-la dans `assets/js/config.js` → `appCheckSiteKey: "..."`.
+3. Dans `index.html` et `admin.html`, dans la ligne `Content-Security-Policy`, remplacez :
+   - `script-src 'self'` par `script-src 'self' https://www.google.com https://www.gstatic.com`
+   - `frame-src 'none'` par `frame-src https://www.google.com https://recaptcha.google.com`
+4. Après quelques jours sans erreur, dans App Check → **Firestore → Appliquer (Enforce)**.
+
+---
+
+## Ce qui protège le site
+
+- **Pas de serveur à pirater** : GitHub Pages ne sert que des fichiers statiques.
+- **Les données sont protégées par les règles Firestore**, vérifiées côté Google,
+  pas par le code du navigateur.
+- **Aucun script externe** : Firebase et les polices sont hébergés dans le site ;
+  une politique de sécurité (CSP) stricte bloque tout script venant d'ailleurs.
+- **Aucun HTML saisi n'est interprété** : tous les textes (y compris ceux de l'admin et
+  des clients) sont affichés comme du texte brut ; seuls les liens `https://` sont acceptés.
+- **Session admin** : fermée à la fermeture du navigateur et après 30 min d'inactivité ;
+  l'admin refuse de s'afficher dans un cadre (anti-clickjacking) et n'est pas indexé par Google.
+- **Formulaire** : champ piège anti-robot, limite d'une demande par minute, longueurs limitées.
+- **Export CSV** protégé contre l'injection de formules Excel.
+
+---
+
+## Tester sur votre ordinateur
+
+```
+python -m http.server 8000
+```
+Puis ouvrez `http://localhost:8000/?demo` (site) et `http://localhost:8000/admin.html?demo`
+(admin : `admin@demo.local` / `demo-admin-2026`). Le **mode démo ne fonctionne que sur
+localhost** : il est impossible de l'activer sur le vrai site.
+
+## Mettre à jour Firebase (développeurs)
+
+Les fichiers de `assets/vendor/` sont générés avec esbuild à partir du paquet npm
+`firebase@10.14.1` (app, firestore/lite, auth, app-check).

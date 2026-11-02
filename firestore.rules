@@ -1,79 +1,130 @@
 rules_version = '2';
 
 // ============================================================
-//  Règles de sécurité Firestore
-//  À coller dans Firebase Console → Firestore Database → Règles
-//  Ce sont ELLES qui protègent vraiment vos données :
-//  même si quelqu'un modifie le code du site, il ne peut pas
-//  dépasser les permissions données par l'administrateur.
+//  Règles de sécurité Firestore — à coller dans :
+//  Firebase Console → Firestore Database → Règles → Publier
+//
+//  Ce sont ELLES qui protègent vraiment le site : même si quelqu'un
+//  modifie le code JavaScript dans son navigateur, il ne peut pas
+//  dépasser ce qui est autorisé ici. Tout ce qui n'est pas
+//  explicitement autorisé est INTERDIT.
 // ============================================================
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ---------- Qui est connecté, avec quels droits ----------
     function signedIn()  { return request.auth != null; }
     function userPath()  { return /databases/$(database)/documents/users/$(request.auth.uid); }
-    function hasProfile(){ return signedIn() && exists(userPath()); }
     function me()        { return get(userPath()).data; }
-    function active()    { return hasProfile() && me().active == true; }
+    function active()    { return signedIn() && exists(userPath()) && me().active == true; }
     function isAdmin()   { return active() && me().role == 'admin'; }
-    function can(p)      { return isAdmin() || (active() && me().permissions.hasAny([p])); }
-    function isStaff()   { return active(); }
+    function can(p)      { return isAdmin() || (active() && me().permissions is list && me().permissions.hasAny([p])); }
     function setupDone() { return exists(/databases/$(database)/documents/meta/setup); }
 
-    // ---------- Produits ----------
-    match /products/{id} {
-      allow read:   if resource.data.published == true || isStaff();
-      allow create: if can('products.create');
-      allow update: if can('products.edit')
-                    || (can('products.create') && resource.data.createdBy == request.auth.uid);
-      allow delete: if can('products.delete');
-    }
+    // ---------- Outils de validation ----------
+    function str(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
+    function optStr(d, k, max) { return !(k in d) || str(d[k], 0, max); }
+    function bilingual(d, k, max) { return optStr(d, k + '_fr', max) && optStr(d, k + '_ar', max); }
+    function httpsOrEmpty(d, k) { return !(k in d) || d[k] == '' || (str(d[k], 9, 300) && d[k].matches('https://.+')); }
 
-    // ---------- Catégories ----------
-    match /categories/{id} {
-      allow read:  if true;
-      allow write: if can('categories.manage');
-    }
-
-    // ---------- Paramètres de la boutique ----------
-    match /settings/{id} {
-      allow read:  if true;
-      allow write: if isAdmin();
-    }
-
-    // ---------- Commandes ----------
-    match /orders/{id} {
-      // Tout visiteur peut envoyer une commande (statut "new" uniquement)
-      allow create: if request.resource.data.status == 'new'
-                    && request.resource.data.id == id
-                    && request.resource.data.items is list
-                    && request.resource.data.items.size() > 0
-                    && request.resource.data.items.size() <= 50
-                    && request.resource.data.total is number
-                    && request.resource.data.customer.name is string
-                    && request.resource.data.customer.phone is string;
-      allow read:   if can('orders.view');
-      allow update: if can('orders.manage');
+    // ---------- Packs (prix) ----------
+    match /packs/{id} {
+      allow read: if resource.data.active == true || active();
+      allow create, update: if can('packs.edit') && validPack(request.resource.data, id);
       allow delete: if isAdmin();
     }
-
-    // ---------- Utilisateurs ----------
-    match /users/{uid} {
-      allow read:   if (signedIn() && request.auth.uid == uid) || isAdmin();
-      allow update, delete: if isAdmin();
-      allow create: if isAdmin()
-                    // Premier lancement : le tout premier compte devient administrateur
-                    || (signedIn() && request.auth.uid == uid && !setupDone()
-                        && existsAfter(/databases/$(database)/documents/meta/setup)
-                        && request.resource.data.role == 'admin');
+    function validPack(d, id) {
+      return d.keys().hasOnly(['id', 'order', 'active', 'highlight', 'mode', 'icon', 'price',
+                               'name_fr', 'name_ar', 'delay_fr', 'delay_ar', 'desc_fr', 'desc_ar',
+                               'features_fr', 'features_ar', 'badge_fr', 'badge_ar'])
+        && d.id == id && id.matches('[a-z0-9-]{1,40}')
+        && d.price is number && d.price >= 0 && d.price <= 100000
+        && d.active is bool && d.highlight is bool
+        && d.mode in ['remote', 'onsite'] && str(d.icon, 1, 20)
+        && str(d.name_fr, 1, 60) && optStr(d, 'name_ar', 60)
+        && bilingual(d, 'delay', 80) && bilingual(d, 'desc', 300)
+        && bilingual(d, 'features', 800) && bilingual(d, 'badge', 30);
     }
 
-    // ---------- Méta (premier lancement) ----------
-    match /meta/{docId} {
+    // ---------- Contenu et coordonnées ----------
+    match /settings/content {
       allow read: if true;
+      allow write: if can('content.edit') && request.resource.data.size() < 80;
+    }
+    match /settings/site {
+      allow read: if true;
+      allow write: if isAdmin()
+                   && httpsOrEmpty(request.resource.data, 'anydeskUrl')
+                   && httpsOrEmpty(request.resource.data, 'facebook')
+                   && httpsOrEmpty(request.resource.data, 'instagram')
+                   && httpsOrEmpty(request.resource.data, 'linkedin')
+                   && request.resource.data.size() < 60;
+    }
+
+    // ---------- Demandes des clients ----------
+    match /requests/{id} {
+      // Tout visiteur peut ENVOYER une demande, avec des champs stricts.
+      // Il ne peut ni la relire, ni la modifier, ni voir celles des autres.
+      allow create: if validNewRequest(request.resource.data, id);
+      allow read:   if can('requests.view');
+      allow update: if can('requests.manage')
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['status', 'note', 'assignedTo', 'updatedAt', 'updatedBy'])
+                    && request.resource.data.status in ['new', 'progress', 'done', 'cancelled']
+                    && str(request.resource.data.note, 0, 2000)
+                    && str(request.resource.data.assignedTo, 0, 80)
+                    && request.resource.data.updatedBy == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+    function validNewRequest(d, id) {
+      let pack = get(/databases/$(database)/documents/packs/$(d.packId)).data;
+      return d.keys().hasOnly(['id', 'packId', 'packName', 'price', 'mode', 'name', 'company', 'phone', 'city',
+                               'address', 'category', 'problem', 'contactPref', 'lang', 'status', 'note',
+                               'assignedTo', 'createdAt'])
+        && d.keys().hasAll(['id', 'packId', 'price', 'name', 'phone', 'city', 'category', 'problem', 'status', 'createdAt'])
+        && d.id == id && id.matches('IT-[A-Z0-9]{8}')
+        && d.status == 'new' && d.note == '' && d.assignedTo == ''
+        && d.createdAt == request.time
+        && str(d.packId, 1, 40) && pack.active == true
+        && d.price == pack.price && d.mode == pack.mode
+        && str(d.packName, 0, 80)
+        && str(d.name, 2, 80) && str(d.company, 0, 80)
+        && str(d.phone, 9, 20) && d.phone.matches('[0-9 +().-]+')
+        && str(d.city, 2, 60) && str(d.address, 0, 200)
+        && (d.mode != 'onsite' || d.address.size() >= 5)
+        && str(d.category, 1, 80) && str(d.problem, 10, 1500)
+        && d.contactPref in ['anydesk', 'video', 'any', 'onsite']
+        && d.lang in ['fr', 'ar'];
+    }
+
+    // ---------- Utilisateurs de l'admin ----------
+    match /users/{uid} {
+      allow read: if (signedIn() && request.auth.uid == uid) || isAdmin();
+      allow create, update: if isAdmin() && validUser(request.resource.data)
+                            // un administrateur ne peut pas se retirer ses propres droits par erreur
+                            && (uid != request.auth.uid || (request.resource.data.role == 'admin' && request.resource.data.active == true))
+                            // Premier lancement uniquement : le tout premier compte devient administrateur
+                            || (signedIn() && request.auth.uid == uid && !setupDone()
+                                && existsAfter(/databases/$(database)/documents/meta/setup)
+                                && validUser(request.resource.data)
+                                && request.resource.data.role == 'admin' && request.resource.data.active == true);
+      allow delete: if isAdmin() && uid != request.auth.uid;
+    }
+    function validUser(d) {
+      return d.keys().hasOnly(['name', 'email', 'role', 'permissions', 'active', 'createdAt'])
+        && d.role in ['admin', 'tech'] && d.active is bool && d.permissions is list
+        && d.permissions.hasOnly(['requests.view', 'requests.manage', 'packs.edit', 'content.edit'])
+        && str(d.name, 0, 80);
+    }
+
+    // ---------- Premier lancement ----------
+    match /meta/{docId} {
+      allow read: if docId == 'setup';
       allow create: if docId == 'setup' && signedIn() && !setupDone()
                     && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
       allow update, delete: if false;
     }
+
+    // Tout le reste (anciennes collections incluses) est fermé.
   }
 }
