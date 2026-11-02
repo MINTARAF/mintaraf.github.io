@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Najma Digital — Produits digitaux</title>
+  <meta name="description" content="Formations, templates et e-books. Commandez en quelques clics et recevez vos fichiers sur WhatsApp.">
+  <meta name="theme-color" content="#0F1430">
+  <meta property="og:title" content="Najma Digital">
+  <meta property="og:description" content="Produits digitaux livrés sur WhatsApp.">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div id="demoRibbon" class="demo-ribbon" hidden></div>
+  <div id="announce" class="announce" hidden></div>
+
+  <header class="site-header">
+    <div class="wrap header-row">
+      <a href="#/" class="logo" id="logo" aria-label="Accueil"></a>
+      <nav class="main-nav" aria-label="Navigation">
+        <a href="#/" data-i18n="nav_home" data-route="home"></a>
+        <a href="#/shop" data-i18n="nav_shop" data-route="shop"></a>
+        <a href="#/faq" data-i18n="nav_faq" data-route="faq"></a>
+      </nav>
+      <div class="header-actions">
+        <button class="icon-btn" id="searchToggle" aria-label="Rechercher"></button>
+        <button class="lang-btn" id="langBtn" data-i18n="lang_switch"></button>
+        <button class="icon-btn" id="cartBtn" aria-label="Panier">
+          <span class="cart-count" id="cartCount" hidden>0</span>
+        </button>
+      </div>
+    </div>
+    <div class="search-bar" id="searchBar" hidden>
+      <div class="wrap">
+        <label class="sr-only" for="searchInput">Recherche</label>
+        <input class="input" id="searchInput" type="search" data-i18n-ph="search_ph" autocomplete="off">
+      </div>
+    </div>
+  </header>
+
+  <main id="app" tabindex="-1"></main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-grid" id="footerGrid"></div>
+      <div class="footer-bottom" id="footerBottom"></div>
+    </div>
+  </footer>
+
+  <div class="overlay" id="overlay" hidden></div>
+  <aside class="drawer" id="drawer" aria-hidden="true" aria-labelledby="drawerTitle" role="dialog">
+    <div class="drawer-head">
+      <h2 id="drawerTitle" data-i18n="cart"></h2>
+      <button class="icon-btn" id="drawerClose" aria-label="Fermer"></button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+    <div class="drawer-foot" id="drawerFoot"></div>
+  </aside>
+
+  <a class="wa-float" id="waFloat" target="_blank" rel="noopener" aria-label="WhatsApp"></a>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script type="module" src="assets/js/store.js"></script>
+</body>
+</html>
